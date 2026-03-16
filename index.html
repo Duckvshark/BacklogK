@@ -126,28 +126,7 @@ const states = {
 function S() { return states[currentTab]; }
 function T() { return THEMES[currentTab]; }
 
-let saveTimer = null;
-function save() {
-  // Write to localStorage immediately
-  ['personal','work'].forEach(tab => {
-    localStorage.setItem(SK[tab], JSON.stringify({ items:states[tab].items, picks:states[tab].picks, lastDate:todayStr() }));
-  });
-  // Debounce the API save by 600ms
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => saveToDB(), 600);
-}
-
-async function saveToDB() {
-  for (const tab of ['personal','work']) {
-    try {
-      await fetch('/.netlify/functions/todos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action:'save_all', items:states[tab].items, picks:states[tab].picks, lastDate:todayStr(), tab })
-      });
-    } catch(e) { /* offline — localStorage already saved */ }
-  }
-}
+let toastTimer = null;
 let ctxMenuEl = null;
 let holdTimer = null;
 
@@ -473,7 +452,7 @@ function openEdit(id) {
 function toggleStar(id) {
   pushUndo('flag toggle');
   S().items = S().items.map(i=>i.id===id?{...i,starred:!i.starred}:i);
-  render(); save();
+  render();
 }
 
 function addToPicks(id) {
@@ -500,7 +479,7 @@ function bindEvents(picksFull) {
     const last = s.undoStack.pop();
     s.items = last.items; s.picks = last.picks;
     showToast('↩ Undid: '+last.label);
-    render(); save();
+    render();
   });
 
   const doAdd = () => {
@@ -509,7 +488,7 @@ function bindEvents(picksFull) {
     if (!val) return;
     pushUndo('add item');
     S().items.unshift({ id:Date.now(), text:val, done:false, addedAt:todayStr(), doneAt:null, notes:'', url:'', starred:false });
-    render(); save();
+    render();
   };
   document.getElementById('btn-add')?.addEventListener('click', doAdd);
   document.getElementById('new-input')?.addEventListener('keydown', e=>e.key==='Enter'&&doAdd());
@@ -565,7 +544,7 @@ function bindEvents(picksFull) {
     pushUndo('edit item');
     S().items = S().items.map(i=>i.id===S().editingId?{...i,text,notes,url}:i);
     S().editingId = null;
-    render(); save();
+    render();
   };
   document.getElementById('edit-save')?.addEventListener('click', doSave);
   document.getElementById('edit-text')?.addEventListener('keydown', e=>e.key==='Enter'&&doSave());
@@ -580,7 +559,7 @@ function bindEvents(picksFull) {
     S().items = S().items.filter(i=>i.id!==id);
     S().picks = S().picks.filter(p=>p!==id);
     S().confirmDeleteId = null;
-    render(); save();
+    render();
   });
 
   // Drag & drop — all items draggable; drop target determines action

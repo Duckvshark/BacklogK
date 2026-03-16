@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="My Backlog" />
+  <title>My Backlog</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; min-height: 100vh; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); transition: background 0.3s; }
+    body.tab-personal { background: #fffdf5; }
+    body.tab-work { background: #f8f5ff; }
+    #app { max-width: 480px; margin: 0 auto; padding: 24px 16px 90px; }
+    .tab-bar { position: fixed; bottom: 0; left: 0; right: 0; display: flex; background: #fff; border-top: 1.5px solid #ebebeb; z-index: 50; padding-bottom: env(safe-area-inset-bottom); }
+    .tab-btn { flex: 1; padding: 10px 0 12px; border: none; background: none; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; color: #bbb; transition: color 0.2s; }
+    .tab-btn .tab-icon { font-size: 20px; }
+    .tab-btn.active-personal { color: #5a8a00; }
+    .tab-btn.active-work { color: #6b3fa0; }
+    .tab-indicator { position: absolute; top: 0; height: 2.5px; width: 50%; border-radius: 0 0 3px 3px; transition: left 0.25s cubic-bezier(.4,0,.2,1), background 0.3s; }
+    @keyframes burst {
+      0%   { transform: translate(-50%,0) rotate(var(--a)) translateY(0px) scale(1); opacity:1; }
+      80%  { opacity:1; }
+      100% { transform: translate(-50%,0) rotate(var(--a)) translateY(calc(var(--dist)*-1vh)) scale(0.3); opacity:0; }
+    }
+    .particle { position:fixed; pointer-events:none; z-index:999; filter: drop-shadow(0 0 3px currentColor); animation: burst 0.9s ease-out both; }
+    .toast { position:fixed; bottom:70px; left:50%; transform:translateX(-50%); background:#2d2d2d; color:#fff; padding:10px 20px; border-radius:20px; font-size:14px; z-index:100; white-space:nowrap; box-shadow:0 4px 12px rgba(0,0,0,0.2); opacity:0; transition:opacity 0.2s; pointer-events:none; }
+    .toast.show { opacity:1; }
+    .ctx-menu { position:fixed; z-index:300; background:#fff; border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,0.18); padding:6px; min-width:170px; }
+    .ctx-item { padding:10px 16px; border-radius:8px; font-size:14px; cursor:pointer; color:#2d2d2d; display:flex; align-items:center; gap:10px; }
+    .ctx-item:hover { background:#f5f5f5; }
+    .ctx-item.danger { color:#ff4444; }
+    .ctx-item.danger:hover { background:#fff0f0; }
+    .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,0.35); z-index:200; display:flex; align-items:center; justify-content:center; padding:24px; }
+    .modal { background:#fff; border-radius:16px; padding:24px; width:100%; max-width:400px; box-shadow:0 8px 32px rgba(0,0,0,0.18); }
+    .modal h3 { font-size:17px; color:#2d2d2d; margin-bottom:16px; }
+    .modal label { font-size:13px; color:#aaa; display:block; margin-bottom:4px; margin-top:10px; }
+    .modal input, .modal textarea { width:100%; padding:9px 12px; border-radius:9px; border:2px solid #e0e0e0; font-size:15px; font-family:inherit; outline:none; }
+    .modal textarea { font-size:14px; resize:vertical; line-height:1.5; }
+    .modal-url-hint { font-size:11px; color:#ccc; margin-top:4px; }
+    .modal-btns { display:flex; gap:10px; margin-top:20px; }
+    .modal-btns button { flex:1; padding:10px; border-radius:9px; border:none; font-size:14px; cursor:pointer; }
+    .btn-cancel { background:#f9f9f9 !important; color:#888 !important; border:1.5px solid #e0e0e0 !important; }
+    .btn-save { flex:2 !important; font-weight:700 !important; color:#fff !important; }
+    .btn-delete-confirm { flex:2 !important; background:#ff6b6b !important; font-weight:700 !important; color:#fff !important; }
+    .header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px; }
+    .header h1 { font-size:26px; font-weight:700; color:#2d2d2d; }
+    .header p { color:#aaa; font-size:13px; margin-top:4px; }
+    .btn-undo { padding:8px 14px; border-radius:10px; border:1.5px solid #e0e0e0; font-size:13px; font-weight:600; cursor:pointer; background:#fff; color:#2d2d2d; }
+    .btn-undo:disabled { background:#f5f5f5; color:#ccc; cursor:default; }
+    .add-row { display:flex; gap:8px; margin-bottom:24px; }
+    .add-row input { flex:1; padding:10px 14px; border-radius:10px; border:2px solid #e0e0e0; font-size:15px; font-family:inherit; outline:none; background:#fff; }
+    .btn-add { padding:10px 16px; border-radius:10px; border:none; background:var(--accent); color:#fff; font-weight:700; font-size:20px; cursor:pointer; }
+    .picks-zone { margin-bottom:24px; border-radius:14px; padding:14px 14px 10px; border:2px dashed; transition:all 0.15s; min-height:80px; }
+    .zone-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
+    .zone-title { font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:1px; }
+    .zone-hint { color:#bbb; font-size:13px; font-style:italic; margin-top:4px; }
+    .section-title { font-size:13px; font-weight:600; color:#aaa; text-transform:uppercase; letter-spacing:1px; margin-bottom:10px; }
+    .done-heading { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+    .done-heading-label { font-size:13px; font-weight:700; color:var(--accent-dark); }
+    .done-badge { font-size:12px; background:var(--accent); color:#fff; border-radius:20px; padding:1px 8px; font-weight:700; }
+    .done-line { flex:1; height:1px; background:var(--done-line); }
+    .toggle-done { background:none; border:none; cursor:pointer; font-size:13px; font-weight:600; color:#aaa; text-transform:uppercase; letter-spacing:1px; padding:0; }
+    .item-wrap { position:relative; margin-bottom:6px; border-radius:10px; overflow:hidden; }
+    .item-hint { position:absolute; inset:0; display:flex; align-items:center; padding:0 18px; border-radius:10px; font-size:13px; font-weight:700; transition:background 0.15s; }
+    .item-row { display:flex; align-items:center; gap:8px; padding:9px 10px; border-radius:10px; border:1.5px solid; position:relative; z-index:1; transition:transform 0.25s ease; user-select:none; cursor:pointer; }
+    .item-check { width:22px; height:22px; border-radius:6px; flex-shrink:0; border:2px solid; display:flex; align-items:center; justify-content:center; }
+    .item-text-wrap { flex:1; font-size:15px; line-height:1.4; min-width:0; word-break:break-word; overflow-wrap:anywhere; }
+    .item-text { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
+    .item-text.expanded { -webkit-line-clamp:unset; overflow:visible; }
+    .item-notes-hint { font-size:11px; color:var(--accent); font-weight:600; display:block; margin-top:2px; }
+    .item-notes-body { font-size:13px; color:#888; display:block; margin-top:6px; padding:8px 10px; background:#f7f7f7; border-radius:8px; white-space:pre-wrap; font-style:italic; line-height:1.5; }
+    .item-url { font-size:11px; flex-shrink:0; max-width:72px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-decoration:none; color:var(--accent-dark); font-weight:600; border-bottom:1px solid var(--accent-mid); }
+    .item-flag { font-size:15px; flex-shrink:0; cursor:pointer; line-height:1; padding:2px 0 2px 2px; opacity:0.9; }
+    .item-edit { background:none; border:none; cursor:pointer; font-size:14px; padding:0 2px; flex-shrink:0; opacity:0.4; }
+  </style>
+</head>
+<body class="tab-personal">
+<div id="app"></div>
+<div class="toast" id="toast"></div>
+<div class="tab-bar" id="tab-bar">
+  <div class="tab-indicator" id="tab-indicator" style="left:0"></div>
+  <button class="tab-btn active-personal" id="tab-personal" onclick="switchTab('personal')">
+    <span class="tab-icon">🧠</span>Personal
+  </button>
+  <button class="tab-btn" id="tab-work" onclick="switchTab('work')">
+    <span class="tab-icon">💼</span>Work
+  </button>
+</div>
+
+<script>
+const SK = { personal:'adhd-backlog-personal-v3', work:'adhd-backlog-work-v3' };
+const THEMES = {
+  personal: { accent:'#aadd44', accentDark:'#5a8a00', accentLight:'#f6ffdd', accentMid:'#c8ee77', doneLine:'#e8f8c0', icon:'🧠', label:"Kalindhi's Backlog", hint:'Swipe → for today · ← to delete · long-hold to edit' },
+  work:     { accent:'#9b59d0', accentDark:'#6b3fa0', accentLight:'#f3eeff', accentMid:'#c9a0f0', doneLine:'#e8d8ff', icon:'💼', label:'Work Backlog', hint:'Swipe → for today · ← to delete · long-hold to edit' }
+};
+const INIT = {
+  personal: [
+    { id:1,  text:"Camera fix",         done:false, addedAt:"2026-02-26", doneAt:null, notes:"",  url:"", starred:false },
+    { id:2,  text:"Bring in sheets",    done:true,  addedAt:"2026-02-26", doneAt:"2026-02-26", notes:"", url:"", starred:false },
+    { id:3,  text:"Empty dishwasher",   done:true,  addedAt:"2026-02-26", doneAt:"2026-02-27", notes:"", url:"", starred:false },
+    { id:4,  text:"Clean out fridge",   done:false, addedAt:"2026-02-26", doneAt:null, notes:"",  url:"", starred:false },
+    { id:5,  text:"Term elder",         done:false, addedAt:"2026-02-26", doneAt:null, notes:"",  url:"", starred:false },
+    { id:6,  text:"Rebook swimming",    done:false, addedAt:"2026-02-26", doneAt:null, notes:"",  url:"", starred:false },
+    { id:7,  text:"Used SL t-shirt",    done:true,  addedAt:"2026-02-27", doneAt:"2026-02-27", notes:"", url:"", starred:false },
+    { id:8,  text:"Fix Shreya's bed",   done:true,  addedAt:"2026-02-27", doneAt:"2026-02-28", notes:"", url:"", starred:false },
+    { id:9,  text:"Transfer WhatsApp",  done:true,  addedAt:"2026-02-28", doneAt:"2026-03-01", notes:"", url:"", starred:false },
+    { id:10, text:"Prep lamb for dinner",done:true, addedAt:"2026-03-01", doneAt:"2026-03-01", notes:"", url:"", starred:false },
+    { id:11, text:"Desk and drawers for Shreya's room", done:false, addedAt:"2026-02-26", doneAt:null, notes:"Check IKEA website for KALLAX range", url:"ikea.com/gb", starred:true },
+  ],
+  work: [
+    { id:101, text:"Review Q1 metrics",         done:false, addedAt:"2026-03-10", doneAt:null, notes:"", url:"", starred:true  },
+    { id:102, text:"Update project roadmap",    done:false, addedAt:"2026-03-10", doneAt:null, notes:"", url:"", starred:false },
+    { id:103, text:"Reply to stakeholder email",done:false, addedAt:"2026-03-11", doneAt:null, notes:"", url:"", starred:false },
+    { id:104, text:"Tableau dashboard fix",     done:false, addedAt:"2026-03-12", doneAt:null, notes:"Check OR/AND precedence on VSC filter", url:"", starred:true  },
+    { id:105, text:"1:1 prep notes",            done:true,  addedAt:"2026-03-13", doneAt:"2026-03-14", notes:"", url:"", starred:false },
+  ]
+};
+
+let currentTab = 'personal';
+const states = {
+  personal: { items:[], picks:[], showDone:false, undoStack:[], confirmDeleteId:null, editingId:null, editText:'', editNotes:'', editUrl:'', expandedIds:new Set() },
+  work:     { items:[], picks:[], showDone:false, undoStack:[], confirmDeleteId:null, editingId:null, editText:'', editNotes:'', editUrl:'', expandedIds:new Set() }
+};
+function S() { return states[currentTab]; }
+function T() { return THEMES[currentTab]; }
+
+let toastTimer = null;
+let ctxMenuEl = null;
+let holdTimer = null;
+
+function todayStr() { return new Date().toISOString().slice(0,10); }
+function getStats() {
+  const now = new Date();
+  const today = todayStr();
+  const startOfWeek = new Date(now);
+  startOfWeek.setDate(now.getDate() - now.getDay() + (now.getDay()===0?-6:1)); // Mon
+  const weekStr = startOfWeek.toISOString().slice(0,10);
+  const monthStr = today.slice(0,7);
+  const yearStr = today.slice(0,4);
+  const allDone = [...states.personal.items, ...states.work.items].filter(i => i.done && i.doneAt);
+  return {
+    today: allDone.filter(i => i.doneAt === today).length,
+    week:  allDone.filter(i => i.doneAt >= weekStr).length,
+    month: allDone.filter(i => i.doneAt.slice(0,7) === monthStr).length,
+    year:  allDone.filter(i => i.doneAt.slice(0,4) === yearStr).length,
+  };
+}
+
+function statsHTML() {
+  const st = getStats(); const t = T();
+  const items = [
+    { label:'Today', val:st.today },
+    { label:'This week', val:st.week },
+    { label:'This month', val:st.month },
+    { label:'This year', val:st.year },
+  ];
+  return `<div style="display:flex;gap:8px;margin-bottom:24px;">
+    ${items.map(({label,val})=>`
+      <div style="flex:1;background:#fff;border:1.5px solid #ebebeb;border-radius:12px;padding:10px 6px;text-align:center;">
+        <div style="font-size:22px;font-weight:700;color:${t.accentDark}">${val}</div>
+        <div style="font-size:10px;color:#bbb;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-top:2px">${label}</div>
+      </div>`).join('')}
+  </div>`;
+}
+
+function fmtDoneHeading(s) {
+  if (s==='unknown') return 'Earlier';
+  const diff = Math.floor((new Date(todayStr()) - new Date(s)) / 86400000);
+  const d = new Date(s+'T00:00:00');
+  const date = d.toLocaleDateString('en-GB',{day:'numeric',month:'long'});
+  if (diff===0) return 'Today — '+date;
+  if (diff===1) return 'Yesterday — '+date;
+  if (diff<7) return d.toLocaleDateString('en-GB',{weekday:'long'})+' — '+date;
+  return date;
+}
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function normaliseUrl(u) {
+  if (!u) return '';
+  u = u.trim();
+  if (u && !/^https?:\/\//i.test(u)) u = 'https://'+u;
+  return u;
+}
+function displayUrl(u) {
+  if (!u) return '';
+  return u.replace(/^https?:\/\/(www\.)?/i,'').replace(/\/$/,'');
+}
+
+async function loadTab(tab) {
+  // Always try Neon first — it is the source of truth
+  try {
+    const res = await fetch(`/.netlify/functions/todos?tab=${tab}`);
+    if (!res.ok) throw new Error('Server error ' + res.status);
+    const data = await res.json();
+    let picks = data.picks || [];
+    if (data.lastDate && data.lastDate !== todayStr()) {
+      picks = picks.filter(id => !data.items.find(i => i.id === id)?.done);
+    }
+    states[tab].items = (data.items || []).map(i => ({ url:'', starred:false, ...i }));
+    states[tab].picks = picks;
+    // Overwrite localStorage with fresh Neon data
+    localStorage.setItem(SK[tab], JSON.stringify({ items: states[tab].items, picks: states[tab].picks, lastDate: todayStr() }));
+    return;
+  } catch(e) {
+    // Neon unreachable — fall through to localStorage
+  }
+  // Offline fallback — use cached data only
+  try {
+    const raw = localStorage.getItem(SK[tab]);
+    if (raw) {
+      const saved = JSON.parse(raw);
+      states[tab].items = (saved.items || []).map(i => ({ url:'', starred:false, ...i }));
+      states[tab].picks = saved.picks || [];
+      return;
+    }
+  } catch {}
+  // Truly empty — new user, no data anywhere
+  states[tab].items = [];
+  states[tab].picks = [];
+}
+
+async function load() {
+  await Promise.all(['personal','work'].map(tab => loadTab(tab)));
+}
+
+function save() {
+  ['personal','work'].forEach(tab => {
+    localStorage.setItem(SK[tab], JSON.stringify({ items:states[tab].items, picks:states[tab].picks, lastDate:todayStr() }));
+  });
+}
+
+function applyTheme(tab) {
+  const t = THEMES[tab], r = document.documentElement.style;
+  r.setProperty('--accent', t.accent);
+  r.setProperty('--accent-dark', t.accentDark);
+  r.setProperty('--accent-light', t.accentLight);
+  r.setProperty('--accent-mid', t.accentMid);
+  r.setProperty('--done-line', t.doneLine);
+}
+
+function switchTab(tab) {
+  currentTab = tab;
+  applyTheme(tab);
+  document.body.className = 'tab-'+tab;
+  document.getElementById('tab-personal').className = 'tab-btn'+(tab==='personal'?' active-personal':'');
+  document.getElementById('tab-work').className = 'tab-btn'+(tab==='work'?' active-work':'');
+  const ind = document.getElementById('tab-indicator');
+  ind.style.left = tab==='personal' ? '0' : '50%';
+  ind.style.background = THEMES[tab].accent;
+  closeCtxMenu();
+  render();
+}
+
+function pushUndo(label) {
+  const s = S();
+  s.undoStack = [...s.undoStack.slice(-9), { items:JSON.parse(JSON.stringify(s.items)), picks:[...s.picks], label }];
+}
+
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+function spawnParticles() {
+  const colors = currentTab==='work'
+    ? ['#9b59d0','#c9a0f0','#ff7eb3','#7ed6ff','#ffb347','#e8d8ff']
+    : ['#aadd44','#ffe94d','#ff7eb3','#7ed6ff','#ffb347','#cc99ff'];
+  for (let i=0;i<22;i++) {
+    const el = document.createElement('div');
+    el.className = 'particle';
+    el.textContent = Math.random()>0.5 ? '★' : '✦';
+    el.style.cssText = `left:${20+Math.random()*60}%;bottom:40%;font-size:${10+Math.random()*16}px;color:${colors[Math.floor(Math.random()*colors.length)]};--a:${Math.random()*360}deg;--dist:${30+Math.random()*55};animation-delay:${Math.random()*180}ms;`;
+    document.body.appendChild(el);
+    setTimeout(()=>el.remove(),1400);
+  }
+}
+
+function closeCtxMenu() {
+  if (ctxMenuEl) { ctxMenuEl.remove(); ctxMenuEl = null; }
+}
+
+function showCtxMenu(e, id, fromTouch) {
+  if (e && e.preventDefault) e.preventDefault();
+  closeCtxMenu();
+  const item = S().items.find(i=>i.id===id);
+  if (!item) return;
+  const t = T();
+  const menu = document.createElement('div');
+  menu.className = 'ctx-menu';
+  menu.innerHTML = `
+    <div class="ctx-item" id="ctx-flag">${item.starred?'☆ Remove star':'⭐ Star (priority)'}</div>
+    <div class="ctx-item" id="ctx-edit">✏️ Edit</div>
+    <div class="ctx-item danger" id="ctx-delete">🗑 Delete</div>
+  `;
+  document.body.appendChild(menu);
+  ctxMenuEl = menu;
+  let mx, my;
+  if (fromTouch) {
+    // centre near middle of screen on touch
+    mx = window.innerWidth/2 - 85;
+    my = window.innerHeight/2 - 60;
+  } else {
+    mx = Math.min(e.clientX, window.innerWidth-190);
+    my = Math.min(e.clientY, window.innerHeight-140);
+  }
+  menu.style.left = mx+'px'; menu.style.top = my+'px';
+  menu.querySelector('#ctx-flag').onclick  = () => { closeCtxMenu(); toggleStar(id); };
+  menu.querySelector('#ctx-edit').onclick  = () => { closeCtxMenu(); openEdit(id); };
+  menu.querySelector('#ctx-delete').onclick= () => { closeCtxMenu(); S().confirmDeleteId=id; render(); };
+  setTimeout(() => document.addEventListener('click', closeCtxMenu, {once:true}), 0);
+}
+
+function render() {
+  save();
+  const s = S(); const t = T();
+  const pending = s.items.filter(i=>!i.done);
+  const done    = s.items.filter(i=>i.done);
+  const sorted  = [...pending].sort((a,b) => { if (a.starred!==b.starred) return b.starred-a.starred; return b.id-a.id; });
+  const picks   = s.picks.map(id=>s.items.find(i=>i.id===id)).filter(Boolean);
+  const rest    = sorted.filter(i=>!s.picks.includes(i.id));
+  const picksFull = s.picks.length>=3;
+
+  const doneGroups = {};
+  done.forEach(item => { const k=item.doneAt||'unknown'; if (!doneGroups[k]) doneGroups[k]=[]; doneGroups[k].push(item); });
+  const doneDates = Object.keys(doneGroups).sort((a,b)=>b.localeCompare(a));
+
+  document.getElementById('app').innerHTML = `
+    <div class="header">
+      <div>
+        <h1>${t.icon} ${t.label}</h1>
+        <p>${t.hint}</p>
+      </div>
+      <button class="btn-undo" id="btn-undo" ${!s.undoStack.length?'disabled':''}>↩ Undo</button>
+    </div>
+    <div class="add-row">
+      <input id="new-input" placeholder="Capture a thought…" autocomplete="off" />
+      <button class="btn-add" id="btn-add">+</button>
+    </div>
+    ${statsHTML()}
+    <div class="picks-zone" id="picks-zone" style="background:${picks.length?t.accentLight:'#f9f9f9'};border-color:${picks.length?t.accent:'#ddd'}">
+      <div class="zone-header">
+        <span class="zone-title" style="color:${picks.length?t.accentDark:'#aaa'}">
+          🎯 Today's picks &nbsp;<span style="font-weight:400;font-size:12px">${[0,1,2].map(i=>picks[i]?'●':'○').join(' ')}</span>
+        </span>
+        ${picks.length?`<span style="font-size:12px;color:#aaa">${picks.filter(i=>i.done).length}/${picks.length} done</span>`:''}
+      </div>
+      ${picks.length===0?'<p class="zone-hint">Swipe right or drag items here — up to 3</p>':''}
+      ${picks.map(item=>itemHTML(item,true)).join('')}
+    </div>
+    ${rest.length?`
+    <div id="backlog-zone">
+      <p class="section-title">Backlog (${rest.length})${picksFull?' <span style="color:#ffb347;font-weight:400">— picks full</span>':''}</p>
+      ${rest.map(item=>itemHTML(item,false)).join('')}
+    </div>`:''}
+    ${pending.length===0?'<p style="color:#aaa;font-style:italic;font-size:15px;text-align:center;margin-top:24px">All clear! Add something new ✨</p>':''}
+    <div style="margin-top:28px">
+      <button class="toggle-done" id="toggle-done">${s.showDone?'▾':'▸'} Done (${done.length})</button>
+      ${s.showDone?`<div style="margin-top:12px">${doneDates.map(date=>`
+        <div style="margin-bottom:20px">
+          <div class="done-heading">
+            <span class="done-heading-label">${fmtDoneHeading(date)}</span>
+            <span class="done-badge">${doneGroups[date].length}</span>
+            <div class="done-line"></div>
+          </div>
+          ${doneGroups[date].map(item=>itemHTML(item,false)).join('')}
+        </div>`).join('')}</div>`:''}
+    </div>
+    ${s.confirmDeleteId ? confirmDeleteModal() : ''}
+    ${s.editingId ? editModal() : ''}
+  `;
+
+  bindEvents(picksFull);
+}
+
+function itemHTML(item, inPicks) {
+  const t = T(); const s = S();
+  const expanded = s.expandedIds.has(item.id);
+  const hasNotes = item.notes && item.notes.trim();
+  const checkBg     = item.done ? t.accent : '#f0f0f0';
+  const checkBorder = item.done ? t.accentDark : '#ccc';
+  const textColor   = item.done ? '#888' : '#2d2d2d';
+  const rowBg       = item.done ? t.accentLight+'99' : '#fff';
+  const borderColor = item.done ? t.accent : item.starred ? t.accentMid : inPicks ? t.accentMid : '#ebebeb';
+  const textDecor   = item.done ? `background:linear-gradient(transparent 45%, ${t.accent}66 45%, ${t.accent}66 75%, transparent 75%)` : '';
+  const urlDisplay  = item.url ? displayUrl(item.url) : '';
+  const urlFull     = item.url ? normaliseUrl(item.url) : '';
+  // picks items are draggable back to backlog; backlog items draggable to picks when not full
+  return `
+    <div class="item-wrap" data-id="${item.id}" data-inpicks="${inPicks}">
+      <div class="item-hint" data-id="${item.id}" style="display:none"></div>
+      <div class="item-row" data-id="${item.id}" draggable="${inPicks ? 'true' : (!item.done ? 'true' : 'false')}"
+        style="background:${rowBg};border-color:${borderColor}">
+        <div class="item-check" data-check="${item.id}" style="background:${checkBg};border-color:${checkBorder}">
+          ${item.done?`<span style="font-size:12px;color:#fff;font-weight:700">✓</span>`:''}
+        </div>
+        <span class="item-text-wrap" data-expand="${item.id}" style="color:${textColor}">
+          <span class="item-text${expanded?' expanded':''}" style="${textDecor}">${esc(item.text)}</span>
+          ${hasNotes&&!expanded?'<span class="item-notes-hint">📎 notes — tap to view</span>':''}
+          ${hasNotes&&expanded?`<span class="item-notes-body">${esc(item.notes)}</span>`:''}
+        </span>
+        ${urlDisplay?`<a class="item-url" href="${esc(urlFull)}" target="_blank" rel="noopener" title="${esc(urlFull)}" onclick="event.stopPropagation()">${esc(urlDisplay)}</a>`:''}
+        <button class="item-edit" title="Edit" onclick="event.stopPropagation(); openEdit(${item.id})">✏️</button>
+        <span class="item-flag" data-flag="${item.id}" title="${item.starred?'Remove star':'Star (priority)'}">${item.starred?'⭐':'☆'}</span>
+      </div>
+    </div>`;
+}
+
+function confirmDeleteModal() {
+  const item = S().items.find(i=>i.id===S().confirmDeleteId);
+  return `<div class="modal-bg" id="confirm-bg">
+    <div class="modal">
+      <h3>🗑 Delete task?</h3>
+      <p style="font-size:14px;color:#888;margin-bottom:0">"${esc(item?.text||'')}"</p>
+      <div class="modal-btns">
+        <button class="btn-cancel" id="confirm-cancel">Cancel</button>
+        <button class="btn-delete-confirm" id="confirm-ok">Yes, delete</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function editModal() {
+  const s = S(); const t = T();
+  return `<div class="modal-bg" id="edit-bg">
+    <div class="modal">
+      <h3>✏️ Edit task</h3>
+      <label>Task name</label>
+      <input id="edit-text" value="${esc(s.editText)}" autocomplete="off"/>
+      <label>URL / link <span style="font-weight:400;color:#ccc">(optional)</span></label>
+      <input id="edit-url" value="${esc(s.editUrl)}" placeholder="e.g. ikea.com/gb" autocomplete="off" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"/>
+      <p class="modal-url-hint">💡 Shorten long URLs at bit.ly or tinyurl.com</p>
+      <label>Notes & updates</label>
+      <textarea id="edit-notes" rows="4" placeholder="Details, address, next steps…">${esc(s.editNotes)}</textarea>
+      <div class="modal-btns">
+        <button class="btn-cancel" id="edit-cancel">Cancel</button>
+        <button class="btn-save" id="edit-save" style="background:${t.accent}">Save changes</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function openEdit(id) {
+  const item = S().items.find(i=>i.id===id);
+  if (!item) return;
+  Object.assign(S(), { editingId:id, editText:item.text, editNotes:item.notes||'', editUrl:item.url||'' });
+  render();
+}
+
+function toggleStar(id) {
+  pushUndo('flag toggle');
+  S().items = S().items.map(i=>i.id===id?{...i,starred:!i.starred}:i);
+  render();
+}
+
+function addToPicks(id) {
+  const s = S();
+  if (s.picks.includes(id)) return;
+  if (s.picks.length>=3) { showToast("Today's 3 picks are full — remove one first"); return; }
+  pushUndo('add to picks');
+  s.items = s.items.map(i=>i.id===id?{...i,starred:true}:i);
+  s.picks.push(id);
+  render();
+}
+
+function removeFromPicks(id) {
+  pushUndo('remove from picks');
+  S().picks = S().picks.filter(p=>p!==id);
+  showToast('↩ Moved back to backlog (still flagged)');
+  render();
+}
+
+function bindEvents(picksFull) {
+  document.getElementById('btn-undo')?.addEventListener('click', () => {
+    const s = S();
+    if (!s.undoStack.length) return;
+    const last = s.undoStack.pop();
+    s.items = last.items; s.picks = last.picks;
+    showToast('↩ Undid: '+last.label);
+    render();
+  });
+
+  const doAdd = () => {
+    const inp = document.getElementById('new-input');
+    const val = inp?.value.trim();
+    if (!val) return;
+    pushUndo('add item');
+    S().items.unshift({ id:Date.now(), text:val, done:false, addedAt:todayStr(), doneAt:null, notes:'', url:'', starred:false });
+    render();
+  };
+  document.getElementById('btn-add')?.addEventListener('click', doAdd);
+  document.getElementById('new-input')?.addEventListener('keydown', e=>e.key==='Enter'&&doAdd());
+  document.getElementById('toggle-done')?.addEventListener('click', ()=>{ S().showDone=!S().showDone; render(); });
+
+  // Flag tap
+  document.querySelectorAll('[data-flag]').forEach(el => {
+    el.addEventListener('click', e=>{ e.stopPropagation(); toggleStar(Number(el.dataset.flag)); });
+    el.addEventListener('touchend', e=>{ e.stopPropagation(); });
+  });
+
+  // Check/uncheck
+  document.querySelectorAll('[data-check]').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = Number(el.dataset.check);
+      const item = S().items.find(i=>i.id===id);
+      if (!item) return;
+      const completing = !item.done;
+      pushUndo('check/uncheck');
+      S().items = S().items.map(i=>i.id===id?{...i,done:!i.done,doneAt:!i.done?todayStr():null}:i);
+      if (completing) { spawnParticles(); S().picks = S().picks.filter(p=>p!==id); }
+      render();
+    });
+  });
+
+  // Expand notes on tap of text area
+  document.querySelectorAll('[data-expand]').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = Number(el.dataset.expand);
+      if (!S().items.find(i=>i.id===id)?.notes?.trim()) return;
+      S().expandedIds.has(id) ? S().expandedIds.delete(id) : S().expandedIds.add(id);
+      render();
+    });
+  });
+
+  // Right-click context menu (desktop)
+  document.querySelectorAll('.item-row').forEach(row => {
+    row.addEventListener('contextmenu', e=>{ e.stopPropagation(); showCtxMenu(e, Number(row.dataset.id), false); });
+  });
+
+
+
+  // Edit modal
+  document.getElementById('edit-bg')?.addEventListener('click', e=>{ if(e.target.id==='edit-bg'){S().editingId=null;render();} });
+  document.getElementById('edit-cancel')?.addEventListener('click', ()=>{S().editingId=null;render();});
+  const doSave = () => {
+    const text  = document.getElementById('edit-text')?.value.trim();
+    const notes = document.getElementById('edit-notes')?.value.trim();
+    const url   = document.getElementById('edit-url')?.value.trim();
+    if (!text) return;
+    pushUndo('edit item');
+    S().items = S().items.map(i=>i.id===S().editingId?{...i,text,notes,url}:i);
+    S().editingId = null;
+    render();
+  };
+  document.getElementById('edit-save')?.addEventListener('click', doSave);
+  document.getElementById('edit-text')?.addEventListener('keydown', e=>e.key==='Enter'&&doSave());
+
+  // Confirm delete modal
+  document.getElementById('confirm-bg')?.addEventListener('click', e=>{ if(e.target.id==='confirm-bg'){S().confirmDeleteId=null;render();} });
+  document.getElementById('confirm-cancel')?.addEventListener('click', ()=>{S().confirmDeleteId=null;render();});
+  document.getElementById('confirm-ok')?.addEventListener('click', ()=>{
+    const id = S().confirmDeleteId;
+    const item = S().items.find(i=>i.id===id);
+    pushUndo(`delete "${item?.text?.slice(0,20)}"`);
+    S().items = S().items.filter(i=>i.id!==id);
+    S().picks = S().picks.filter(p=>p!==id);
+    S().confirmDeleteId = null;
+    render();
+  });
+
+  // Drag & drop — all items draggable; drop target determines action
+  document.querySelectorAll('.item-row[draggable="true"]').forEach(row => {
+    row.addEventListener('dragstart', e=>{
+      e.dataTransfer.setData('itemId', row.dataset.id);
+              e.dataTransfer.setData('fromPicks', row.closest('[data-inpicks]')?.dataset.inpicks||'false');
+      // prevent drag from stealing clicks on interactive elements
+      if (e.target.closest('[data-edit]') || e.target.closest('[data-flag]') || e.target.closest('[data-check]')) {
+        e.preventDefault(); return;
+      }
+    });
+  });
+  document.getElementById('picks-zone')?.addEventListener('dragover', e=>e.preventDefault());
+  document.getElementById('picks-zone')?.addEventListener('drop', e=>{
+    e.preventDefault();
+    const id = Number(e.dataTransfer.getData('itemId'));
+    const fromPicks = e.dataTransfer.getData('fromPicks')==='true';
+    if (!fromPicks) addToPicks(id);
+  });
+  document.getElementById('backlog-zone')?.addEventListener('dragover', e=>e.preventDefault());
+  document.getElementById('backlog-zone')?.addEventListener('drop', e=>{
+    e.preventDefault();
+    const id = Number(e.dataTransfer.getData('itemId'));
+    const fromPicks = e.dataTransfer.getData('fromPicks')==='true';
+    if (fromPicks) removeFromPicks(id);
+  });
+
+  // Touch swipe — lock axis on first movement
+  document.querySelectorAll('.item-wrap').forEach(wrap => {
+    const row   = wrap.querySelector('.item-row');
+    const hint  = wrap.querySelector('.item-hint');
+    const id    = Number(wrap.dataset.id);
+    const inPicks = wrap.dataset.inpicks==='true';
+    const t = T();
+    let startX=null, startY=null, offsetX=0, moved=false, locked=null;
+    const THRESHOLD=72, LOCK_RATIO=1.8;
+
+    wrap.addEventListener('touchstart', e=>{
+      // Don't initiate swipe if touching flag or check
+      if (e.target.closest('[data-flag]')||e.target.closest('[data-check]')) return;
+      startX=e.touches[0].clientX; startY=e.touches[0].clientY;
+      moved=false; locked=null; offsetX=0;
+    }, {passive:true});
+
+    wrap.addEventListener('touchmove', e=>{
+      if (startX===null) return;
+      const dx=e.touches[0].clientX-startX, dy=e.touches[0].clientY-startY;
+      if (locked===null) {
+        if (Math.abs(dx)<6&&Math.abs(dy)<6) return;
+        locked = Math.abs(dx)>Math.abs(dy)*LOCK_RATIO ? 'h' : 'v';
+      }
+      if (locked!=='h') return;
+      moved=true;
+      // cancel hold if swiping
+      clearTimeout(holdTimer); holdTimer=null;      offsetX=Math.max(-THRESHOLD,Math.min(THRESHOLD,dx));
+      row.style.transform=`translateX(${offsetX}px)`;
+      row.style.transition='none';
+      const committed=Math.abs(offsetX)>=THRESHOLD;
+      if (Math.abs(offsetX)>12) {
+        const right=offsetX>0;
+        hint.style.display='flex';
+        hint.style.justifyContent=right?'flex-start':'flex-end';
+        hint.style.background=committed?(right?(inPicks?'#ffb347':t.accent):'#ff6b6b'):'#eee';
+        hint.style.color=committed?'#fff':'#bbb';
+        hint.textContent=right?(inPicks?'← Back to backlog':'→ Add to today'):'🗑 Delete';
+      } else { hint.style.display='none'; }
+    }, {passive:true});
+
+    wrap.addEventListener('touchend', ()=>{
+      if (moved&&locked==='h'&&Math.abs(offsetX)>=THRESHOLD) {
+        if (offsetX>0) { inPicks?removeFromPicks(id):addToPicks(id); }
+        else { S().confirmDeleteId=id; render(); return; }
+      }
+      row.style.transition='transform 0.25s ease';
+      row.style.transform='translateX(0)';
+      hint.style.display='none';
+      offsetX=0; moved=false; startX=null; startY=null; locked=null;
+    });
+  });
+}
+
+applyTheme('personal');
+document.getElementById('tab-indicator').style.background = THEMES.personal.accent;
+load().then(() => { render(); document.getElementById('new-input')?.focus(); });
+</script>
+</body>
+</html>
